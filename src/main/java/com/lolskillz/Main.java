@@ -6,7 +6,6 @@ import ai.grakn.GraknTx;
 import ai.grakn.GraknTxType;
 import ai.grakn.concept.AttributeType;
 
-import java.util.Arrays;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
@@ -35,7 +34,7 @@ public class Main {
         GraknSession session = Grakn.session(GRAKN_URI, GRAKN_KEYSPACE);
 
         CompletableFuture<Void> asyncAll = define(session)
-                .thenCompose(e -> insertAsync(executorService, session, N_ATTRIBUTE, N_THREAD));
+                .thenCompose(e -> insertMultithreadedExecution(executorService, session, N_ATTRIBUTE, N_THREAD));
 
         //
         // Cleanups: close the session and the executor service
@@ -54,25 +53,25 @@ public class Main {
         }).get();
     }
 
-    private static CompletableFuture<Void> insertAsync(ExecutorService executorService, GraknSession session, int N_ATTRIBUTE, int N_THREAD) {
-        List<CompletableFuture<Void>> all = new LinkedList<>();
+    private static CompletableFuture<Void> insertMultithreadedExecution(ExecutorService executorService, GraknSession session, int numOfAttributes, int numOfExecutions) {
+        List<CompletableFuture<Void>> executions = new LinkedList<>();
 
-        for (int i = 0; i < N_THREAD; ++i) {
+        for (int i = 0; i < numOfExecutions; ++i) {
             final int executionId = i;
-            System.out.println("execution " + i + "starting...");
+            System.out.println("execution " + i + " starting...");
 
-            CompletableFuture<Void> future = CompletableFuture.<Void>supplyAsync(() -> {
-                insert(session, executionId, N_ATTRIBUTE);
+            CompletableFuture<Void> insertExecution = CompletableFuture.<Void>supplyAsync(() -> {
+                insert(session, executionId, numOfAttributes);
                 return null;
             }, executorService).exceptionally(ex2 -> {
                 ex2.printStackTrace(System.err);
                 return null;
             });
 
-            all.add(future);
+            executions.add(insertExecution);
         }
-        
-        return CompletableFuture.allOf(all.toArray(new CompletableFuture[all.size()]));
+
+        return CompletableFuture.allOf(executions.toArray(new CompletableFuture[executions.size()]));
     }
 
     private static CompletableFuture<Void> define(GraknSession session) {
