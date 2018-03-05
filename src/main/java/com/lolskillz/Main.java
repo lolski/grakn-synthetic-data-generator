@@ -4,7 +4,10 @@ import ai.grakn.Grakn;
 import ai.grakn.GraknSession;
 import ai.grakn.GraknTx;
 import ai.grakn.GraknTxType;
+import ai.grakn.Keyspace;
 import ai.grakn.concept.AttributeType;
+import ai.grakn.remote.RemoteGrakn;
+import ai.grakn.util.SimpleURI;
 
 import java.util.LinkedList;
 import java.util.List;
@@ -17,13 +20,31 @@ import java.util.concurrent.TimeUnit;
 import static ai.grakn.graql.Graql.*;
 
 public class Main {
-    public static void main(String[] args) throws InterruptedException, ExecutionException {
+    public static void main(String[] args) {
+        //
+        // Parameters
+        //
+        final String GRAKN_URI = "localhost:48555";
+        final String GRAKN_KEYSPACE = "grakn";
+
+        try (GraknSession session = RemoteGrakn.session(new SimpleURI(GRAKN_URI), Keyspace.of(GRAKN_KEYSPACE))) {
+            try (GraknTx tx = session.open(GraknTxType.WRITE)) {
+                tx.graql().define(label("person").sub("entity")).execute();
+                tx.commit();
+            }
+        }
+
+//        GraknSession session = RemoteGrakn.session(new SimpleURI(GRAKN_URI), Keyspace.of(GRAKN_KEYSPACE));
+//        session.close();
+    }
+
+    public static void main2(String[] args) throws InterruptedException, ExecutionException {
         //
         // Parameters
         //
         final String GRAKN_URI = "localhost:4567";
-        final String GRAKN_KEYSPACE = "grakn4";
-        final int N_THREAD = 32;
+        final String GRAKN_KEYSPACE = "grakn2";
+        final int N_THREAD = 8;
         final int N_ATTRIBUTE = 2000;
         final ExecutorService executorService = Executors.newFixedThreadPool(N_THREAD);
 
