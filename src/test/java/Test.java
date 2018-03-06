@@ -54,4 +54,20 @@ public class Test {
             }
         }
     }
+
+    @org.junit.Test
+    public void testComputeCount() {
+        final String GRAKN_URI = "localhost:48555";
+        final String GRAKN_KEYSPACE = "grakn2";
+
+        try (GraknSession session = RemoteGrakn.session(new SimpleURI(GRAKN_URI), Keyspace.of(GRAKN_KEYSPACE))) {
+            try (GraknTx tx = session.open(GraknTxType.WRITE)) {
+                String entType = "person";
+                tx.graql().define(label(entType).sub("entity")).execute();
+                tx.graql().insert(var().isa(entType)).execute();
+                long count = tx.graql().compute().count().in("entity").execute();
+                System.out.println("entity count = " + count);
+            }
+        }
+    }
 }
