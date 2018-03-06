@@ -20,39 +20,23 @@ import java.util.concurrent.TimeUnit;
 import static ai.grakn.graql.Graql.*;
 
 public class Main {
-    public static void main(String[] args) {
+    public static void main(String[] args) throws InterruptedException, ExecutionException {
         //
         // Parameters
         //
-        final String GRAKN_URI = "localhost:48555";
-        final String GRAKN_KEYSPACE = "grakn";
+        final String GRAKN_URI = System.getenv("GRAKN_URI") != null ? System.getenv("GRAKN_URI") : "localhost:48555";
+        final String GRAKN_KEYSPACE = System.getenv("GRAKN_KEYSPACE") != null ? System.getenv("GRAKN_KEYSPACE") : "grakn";
+        final int N_THREAD = System.getenv("N_THREAD") != null ? Integer.parseInt(System.getenv("N_THREAD")) : 4;
+        final int N_ATTRIBUTE = System.getenv("N_ATTRIBUTE") != null ? Integer.parseInt(System.getenv("N_ATTRIBUTE")) : 200;
 
-        try (GraknSession session = RemoteGrakn.session(new SimpleURI(GRAKN_URI), Keyspace.of(GRAKN_KEYSPACE))) {
-            try (GraknTx tx = session.open(GraknTxType.WRITE)) {
-                tx.graql().define(label("person").sub("entity")).execute();
-                tx.commit();
-            }
-        }
-
-//        GraknSession session = RemoteGrakn.session(new SimpleURI(GRAKN_URI), Keyspace.of(GRAKN_KEYSPACE));
-//        session.close();
-    }
-
-    public static void main2(String[] args) throws InterruptedException, ExecutionException {
-        //
-        // Parameters
-        //
-        final String GRAKN_URI = "localhost:4567";
-        final String GRAKN_KEYSPACE = "grakn2";
-        final int N_THREAD = 8;
-        final int N_ATTRIBUTE = 2000;
         final ExecutorService executorService = Executors.newFixedThreadPool(N_THREAD);
 
         //
         // Create a schema, then perform multi-threaded data insertion where each thread inserts exactly the same data
         //
-        System.out.println("starting test. defining schema...");
-        GraknSession session = Grakn.session(GRAKN_URI, GRAKN_KEYSPACE);
+        System.out.println("starting test with the following configuration: Grakn URI: " + GRAKN_URI + ", keyspace: " + GRAKN_KEYSPACE + ", thread: " + N_THREAD + ", unique attribute: " + N_ATTRIBUTE);
+        System.out.println("defining schema...");
+        GraknSession session = RemoteGrakn.session(new SimpleURI(GRAKN_URI), Keyspace.of(GRAKN_KEYSPACE));
 
         CompletableFuture<Void> asyncAll = define(session)
                 .thenCompose(e -> insertMultithreadedExecution(executorService, session, N_ATTRIBUTE, N_THREAD));

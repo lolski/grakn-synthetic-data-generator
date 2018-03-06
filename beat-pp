@@ -1,0 +1,32 @@
+#!/bin/bash
+
+# Grakn global variables
+if [ -z "${GRAKN_HOME}" ]; then
+    [[ $(readlink $0) ]] && path=$(readlink $0) || path=$0
+    GRAKN_HOME=$(cd "$(dirname "${path}")" && pwd -P)
+fi
+
+# ================================================
+# common helper functions
+# ================================================
+update_classpath_global_var() {
+  # Define CLASSPATH, exclude slf4j as we use logback
+  for jar in "${GRAKN_HOME}"/services/lib/*.jar; do
+      if [[ $jar != *slf4j-log4j12* ]] ; then
+          CLASSPATH="$CLASSPATH":"$jar"
+      fi
+  done
+
+}
+
+# =============================================
+# main routine
+# =============================================
+
+pushd "$GRAKN_HOME" > /dev/null
+
+update_classpath_global_var
+
+java -cp ${CLASSPATH} com.lolskillz.Main $@
+
+popd > /dev/null
