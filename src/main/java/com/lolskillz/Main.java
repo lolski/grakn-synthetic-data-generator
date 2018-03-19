@@ -93,7 +93,8 @@ public class Main {
     private static CompletableFuture<Void> define(GraknSession session) {
         return CompletableFuture.<Void>supplyAsync(() -> {
             try (GraknTx tx = session.open(GraknTxType.WRITE)) {
-                tx.graql().define(label("value").sub("attribute").datatype(AttributeType.DataType.STRING)).execute();
+                tx.graql().define(label("name").sub("attribute").datatype(AttributeType.DataType.STRING)).execute();
+                tx.graql().define(label("person").sub("entity").has("name")).execute();
                 tx.commit();
             }
             return null;
@@ -106,7 +107,7 @@ public class Main {
                 System.out.println("execution " + executionId + " is now inserting attribute(s) no. " + i + "...");
             }
             try (GraknTx tx = session.open(GraknTxType.WRITE)) {
-                tx.graql().insert(var().isa("value").val(Integer.toString(i))).execute();
+                tx.graql().insert(var().isa("person").has("name", Integer.toString(i))).execute();
                 tx.commit();
             }
         }
@@ -114,11 +115,11 @@ public class Main {
 
     private static long countValue(GraknSession session) {
         try (GraknTx tx = session.open(GraknTxType.WRITE)) {
-//            return tx.graql().compute().count().in("value").execute();
-            tx.graql().match(var("x").isa("value")).get().execute().forEach(ans ->
+//            return tx.graql().compute().count().in("name").execute();
+            tx.graql().match(var("x").isa("name")).get().execute().forEach(ans ->
                 System.out.println(ans.get("x").asAttribute().getId().getValue() + " -- " + ans.get("x").asAttribute().getValue())
             );
-            return tx.graql().match(var("x").isa("value")).aggregate(count()).execute();
+            return tx.graql().match(var("x").isa("name")).aggregate(count()).execute();
         }
     }
 }
