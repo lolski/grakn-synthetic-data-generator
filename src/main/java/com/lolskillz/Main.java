@@ -6,10 +6,10 @@ import ai.grakn.GraknTxType;
 import ai.grakn.Keyspace;
 import ai.grakn.concept.AttributeType;
 import ai.grakn.graql.Match;
-import ai.grakn.graql.admin.Answer;
-import ai.grakn.remote.RemoteGrakn;
+import ai.grakn.kgms.remote.RemoteKGMS;
 import ai.grakn.util.SimpleURI;
 
+import java.nio.file.Paths;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
@@ -37,11 +37,10 @@ public class Main {
         // Create a schema, then perform multi-threaded data insertion where each thread inserts exactly the same data
         //
         System.out.println("starting test with the following configuration: Grakn URI: " + GRAKN_URI + ", keyspace: " + GRAKN_KEYSPACE + ", thread: " + N_THREAD + ", unique attribute: " + N_ATTRIBUTE);
-        GraknSession session = RemoteGrakn.session(new SimpleURI(GRAKN_URI), Keyspace.of(GRAKN_KEYSPACE));
+        GraknSession session = RemoteKGMS.session(new SimpleURI(GRAKN_URI), Paths.get("./trustedCert.crt"), Keyspace.of(GRAKN_KEYSPACE), "cassandra", "cassandra");
 
         if (ACTION.equals("count")) {
-            System.out.println("counting attributes...");
-            System.out.println(countValue(session) + " found");
+            verifyAndPrint(session, N_ATTRIBUTE);
         }
         else if (ACTION.equals("insert")) {
             System.out.println("defining schema...");
@@ -131,9 +130,6 @@ public class Main {
                             var("prnt").isa("person").has("name", Integer.toString(i)),
                             var("chld").isa("person").has("name", Integer.toString(i + 1)));
 
-                    System.out.println(toBeLinked.get().toString());
-                    toBeLinked.get().execute().forEach(e -> System.out.println(e.get("prnt") + " (prnt) --> (chld) " + e.get("chld")));
-
                     toBeLinked.insert(var().isa("parentchild").rel("parent", "prnt").rel("child", "chld")).execute();
                 }
                 tx.commit();
@@ -142,13 +138,18 @@ public class Main {
         });
     }
 
-    private static long countValue(GraknSession session) {
+    private static void verifyAndPrint(GraknSession session, int n) {
         try (GraknTx tx = session.open(GraknTxType.WRITE)) {
-//            return tx.graql().compute().count().in("name").execute();
-            tx.graql().match(var("x").isa("name")).get().execute().forEach(ans ->
-                System.out.println(ans.get("x").asAttribute().getId().getValue() + " -- " + ans.get("x").asAttribute().getValue())
-            );
-            return tx.graql().match(var("x").isa("name")).aggregate(count()).execute();
+            for (int i = 0; i < n; ++i) {
+                String prntId = Integer.toString(i);
+                String chldId = Integer.toString(i + 1);
+                Match toBeLinked = tx.graql()
+                        .match(
+                                var("prnt").isa("person").has("name", prntId),
+                                var("chld").isa("person").has("name", chldId));
+
+                toBeLinked.get().execute().forEach(e -> System.out.println(e.get("prnt").getId() + " name = " + prntId + " (prnt) --> (chld) " + e.get("chld").getId() + " " + chldId));
+            }
         }
     }
 }
