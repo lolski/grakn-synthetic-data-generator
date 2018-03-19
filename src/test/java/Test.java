@@ -65,6 +65,11 @@ public class Test {
                 String entType = "person";
                 tx.graql().define(label(entType).sub("entity")).execute();
                 tx.graql().insert(var().isa(entType)).execute();
+                tx.commit();
+            }
+        }
+        try (GraknSession session = RemoteGrakn.session(new SimpleURI(GRAKN_URI), Keyspace.of(GRAKN_KEYSPACE))) {
+            try (GraknTx tx = session.open(GraknTxType.WRITE)) {
                 long count = tx.graql().compute().count().in("entity").execute();
                 System.out.println("entity count = " + count);
             }

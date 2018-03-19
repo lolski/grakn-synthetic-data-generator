@@ -58,7 +58,7 @@ public class Main {
                 try {
                     executorService.shutdown();
                     executorService.awaitTermination(10, TimeUnit.SECONDS);
-                    System.out.println("test halted");
+                    System.out.println("test finished successfully!");
                 } catch (InterruptedException e) {
                     throw new RuntimeException(e);
                 }
@@ -115,6 +115,9 @@ public class Main {
     private static long countValue(GraknSession session) {
         try (GraknTx tx = session.open(GraknTxType.WRITE)) {
 //            return tx.graql().compute().count().in("value").execute();
+            tx.graql().match(var("x").isa("value")).get().execute().forEach(ans ->
+                System.out.println(ans.get("x").asAttribute().getId().getValue() + " -- " + ans.get("x").asAttribute().getValue())
+            );
             return tx.graql().match(var("x").isa("value")).aggregate(count()).execute();
         }
     }
