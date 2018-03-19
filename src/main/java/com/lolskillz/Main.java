@@ -1,13 +1,13 @@
 package com.lolskillz;
 
-import ai.grakn.Grakn;
 import ai.grakn.GraknSession;
 import ai.grakn.GraknTx;
 import ai.grakn.GraknTxType;
 import ai.grakn.Keyspace;
 import ai.grakn.concept.AttributeType;
+import ai.grakn.graql.Match;
+import ai.grakn.graql.admin.Answer;
 import ai.grakn.remote.RemoteGrakn;
-import ai.grakn.remote.RemoteGraknSession;
 import ai.grakn.util.SimpleURI;
 
 import java.util.LinkedList;
@@ -46,19 +46,22 @@ public class Main {
         else if (ACTION.equals("insert")) {
             System.out.println("defining schema...");
             CompletableFuture<Void> asyncAll = define(session)
-                    .thenCompose(e -> insertMultithreadedExecution(executorService, session, N_ATTRIBUTE, N_THREAD));
+                    .thenCompose(e -> insertMultithreadedExecution(executorService, session, N_ATTRIBUTE, N_THREAD))
+                    .thenCompose(e -> relate(session, N_ATTRIBUTE));
 
             //
             // Cleanups: close the session and the executor service
             //
             asyncAll.whenComplete((r, ex) -> {
-                System.out.println("inserted " + N_ATTRIBUTE * N_THREAD + " attribute in total of which "
-                        + N_ATTRIBUTE + " is unique. if post-processing works correctly, grakn should have only " + N_ATTRIBUTE + " attributes.");
                 session.close();
                 try {
                     executorService.shutdown();
                     executorService.awaitTermination(10, TimeUnit.SECONDS);
-                    System.out.println("test finished successfully!");
+                    if (ex == null) {
+                        System.out.println("inserted " + N_ATTRIBUTE * N_THREAD + " attribute in total of which "
+                                + N_ATTRIBUTE + " is unique. if post-processing works correctly, grakn should have only " + N_ATTRIBUTE + " attributes.");
+                        System.out.println("test finished successfully!");
+                    }
                 } catch (InterruptedException e) {
                     throw new RuntimeException(e);
                 }
@@ -91,10 +94,15 @@ public class Main {
     }
 
     private static CompletableFuture<Void> define(GraknSession session) {
-        return CompletableFuture.<Void>supplyAsync(() -> {
+        return CompletableFuture.supplyAsync(() -> {
             try (GraknTx tx = session.open(GraknTxType.WRITE)) {
-                tx.graql().define(label("name").sub("attribute").datatype(AttributeType.DataType.STRING)).execute();
-                tx.graql().define(label("person").sub("entity").has("name")).execute();
+                tx.graql().define(
+                        label("name").sub("attribute").datatype(AttributeType.DataType.STRING),
+                        label("parent").sub("role"),
+                        label("child").sub("role"),
+                        label("person").sub("entity").has("name").plays("parent").plays("child"),
+                        label("parentchild").sub("relationship").relates("parent").relates("child")
+                    ).execute();
                 tx.commit();
             }
             return null;
@@ -111,6 +119,27 @@ public class Main {
                 tx.commit();
             }
         }
+    }
+
+    private static CompletableFuture<Void> relate(GraknSession session, int n) {
+        System.out.println("relating " + n + " person(s) with a parent child relationship...");
+        return CompletableFuture.supplyAsync(() -> {
+            try (GraknTx tx = session.open(GraknTxType.WRITE)) {
+                for (int i = 0; i < n - 1; ++i) {
+                    Match toBeLinked = tx.graql()
+                        .match(
+                            var("prnt").isa("person").has("name", Integer.toString(i)),
+                            var("chld").isa("person").has("name", Integer.toString(i + 1)));
+
+                    System.out.println(toBeLinked.get().toString());
+                    toBeLinked.get().execute().forEach(e -> System.out.println(e.get("prnt") + " (prnt) --> (chld) " + e.get("chld")));
+
+                    toBeLinked.insert(var().isa("parentchild").rel("parent", "prnt").rel("child", "chld")).execute();
+                }
+                tx.commit();
+            }
+            return null;
+        });
     }
 
     private static long countValue(GraknSession session) {
