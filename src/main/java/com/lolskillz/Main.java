@@ -7,6 +7,7 @@ import ai.grakn.Keyspace;
 import ai.grakn.concept.AttributeType;
 import ai.grakn.graql.Match;
 import ai.grakn.kgms.remote.RemoteKGMS;
+import ai.grakn.remote.RemoteGrakn;
 import ai.grakn.util.SimpleURI;
 
 import java.nio.file.Paths;
@@ -38,6 +39,8 @@ public class Main {
         //
         System.out.println("starting test with the following configuration: Grakn URI: " + GRAKN_URI + ", keyspace: " + GRAKN_KEYSPACE + ", thread: " + N_THREAD + ", unique attribute: " + N_ATTRIBUTE);
         GraknSession session = RemoteKGMS.session(new SimpleURI(GRAKN_URI), Paths.get("./trustedCert.crt"), Keyspace.of(GRAKN_KEYSPACE), "cassandra", "cassandra");
+
+//        GraknSession session = RemoteGrakn.session(new SimpleURI(GRAKN_URI), Keyspace.of(GRAKN_KEYSPACE));
 
         if (ACTION.equals("count")) {
             verifyAndPrint(session, N_ATTRIBUTE);
@@ -150,6 +153,14 @@ public class Main {
 
                 toBeLinked.get().execute().forEach(e -> System.out.println(e.get("prnt").getId() + " name = " + prntId + " (prnt) --> (chld) " + e.get("chld").getId() + " " + chldId));
             }
+        }
+
+        try (GraknTx tx = session.open(GraknTxType.READ)) {
+//            long person = tx.graql().compute().count().in("person").execute();
+//            long name = tx.graql().compute().count().in("name").execute();
+            long person = tx.graql().match(var("n").isa("person")).aggregate(count()).execute();
+            long name = tx.graql().match(var("n").isa("name")).aggregate(count()).execute();
+            System.out.println("person count = " + person + ", name = " + name);
         }
     }
 }
