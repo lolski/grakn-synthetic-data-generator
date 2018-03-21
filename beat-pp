@@ -27,6 +27,6 @@ pushd "$GRAKN_HOME" > /dev/null
 
 update_classpath_global_var
 
-java -cp ${CLASSPATH} com.lolskillz.Main $@
+java ${JAVA_OPTS} -cp ${CLASSPATH} com.lolskillz.Main $@
 
 popd > /dev/null

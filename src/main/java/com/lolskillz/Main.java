@@ -7,17 +7,21 @@ import ai.grakn.Keyspace;
 import ai.grakn.concept.AttributeType;
 import ai.grakn.graql.Match;
 import ai.grakn.kgms.remote.RemoteKGMS;
-import ai.grakn.remote.RemoteGrakn;
 import ai.grakn.util.SimpleURI;
 
 import java.nio.file.Paths;
-import java.util.LinkedList;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
+import java.util.function.Consumer;
+import java.util.function.Function;
+import java.util.function.Supplier;
+import java.util.stream.Collectors;
+import java.util.stream.IntStream;
+import java.util.stream.Stream;
 
 import static ai.grakn.graql.Graql.*;
 
@@ -28,7 +32,7 @@ public class Main {
         //
         final String GRAKN_URI = System.getenv("GRAKN_URI") != null ? System.getenv("GRAKN_URI") : "localhost:48555";
         final String GRAKN_KEYSPACE = System.getenv("GRAKN_KEYSPACE") != null ? System.getenv("GRAKN_KEYSPACE") : "grakn";
-        final int DUPLICATE = 1;
+        final int DUPLICATE = System.getenv("DUPLICATE") != null ? Integer.parseInt(System.getenv("DUPLICATE")) : 1;
         final int NUM_ENTITIES = System.getenv("NUM_ENTITIES") != null ? Integer.parseInt(System.getenv("NUM_ENTITIES")) : 200;
         final String ACTION = System.getenv("ACTION") != null ? System.getenv("ACTION") : "count";
 
@@ -48,8 +52,9 @@ public class Main {
         else if (ACTION.equals("insert")) {
             System.out.println("defining schema...");
             CompletableFuture<Void> asyncAll = define(session)
-                    .thenCompose(e -> insert(session, 0, NUM_ENTITIES, executorService))
-                    .thenCompose(e -> relate(session, NUM_ENTITIES));
+                    .thenCompose(e -> insertName(session, NUM_ENTITIES, DUPLICATE, executorService))
+                    .thenCompose(e -> insertPerson(session, 0, NUM_ENTITIES, executorService))
+                    .thenCompose(e -> relatePerson(session, NUM_ENTITIES));
 
             //
             // Cleanups: close the session and the executor service
@@ -60,8 +65,10 @@ public class Main {
                     executorService.shutdown();
                     executorService.awaitTermination(10, TimeUnit.SECONDS);
                     if (ex == null) {
+                        System.out.println("inserted " + NUM_ENTITIES + " entities.");
                         System.out.println("inserted " + NUM_ENTITIES * DUPLICATE + " attribute in total of which "
                                 + NUM_ENTITIES + " is unique. if post-processing works correctly, grakn should have only " + NUM_ENTITIES + " attributes.");
+                        System.out.println("inserted " + (NUM_ENTITIES-1) + " relationships.");
                         System.out.println("test finished successfully!");
                     }
                 } catch (InterruptedException e) {
@@ -90,7 +97,39 @@ public class Main {
         });
     }
 
-    private static CompletableFuture<Void> insert(GraknSession session, int executionId, int n, ExecutorService executorService) {
+    private static CompletableFuture<Void> insertName(GraknSession session, int nameCount, int duplicatePerNameCount, ExecutorService executorService) {
+        // insert name with value 'name'
+        Consumer<Integer> insert = name -> {
+            try (GraknTx tx = session.open(GraknTxType.WRITE)) {
+                tx.graql().insert(var().isa("name").val(Integer.toString(name))).execute();
+                tx.commit();
+            }
+        };
+
+        // insert name with value 'name', along with 'duplicatePerNameCount' duplicates to test post-processing
+        Function<Integer, CompletableFuture<Void>> insertWithDuplicateInParallel = name -> {
+            Stream<CompletableFuture<Void>> insertWithDuplicate = IntStream.range(0, duplicatePerNameCount)
+                    .mapToObj(d -> CompletableFuture.<Void>supplyAsync(() -> {
+                        insert.accept(name);
+                        System.out.println("inserted copy no " + d + " for the name attribute with value '" + name + "'");
+                        return null;
+                    }, executorService));
+
+            final List<CompletableFuture<Void>> collect = insertWithDuplicate.collect(Collectors.toList());
+            return CompletableFuture.allOf(collect.toArray(new CompletableFuture[duplicatePerNameCount]));
+        };
+
+        // insert a 'nameCount' number of name attribute, with'duplicate' number of duplicate
+        Function<Integer, CompletableFuture<Void>> insertAllInParallel = count -> {
+            Stream<CompletableFuture<Void>> insertWithDuplicate = IntStream.range(0, count).mapToObj(insertWithDuplicateInParallel::apply);
+            final List<CompletableFuture<Void>> collect = insertWithDuplicate.collect(Collectors.toList());
+            return CompletableFuture.allOf(collect.toArray(new CompletableFuture[nameCount]));
+        };
+
+        return insertAllInParallel.apply(nameCount);
+    }
+
+    private static CompletableFuture<Void> insertPerson(GraknSession session, int executionId, int n, ExecutorService executorService) {
         return CompletableFuture.supplyAsync(() -> {
             for (int i = 0; i < n; ++i) {
                 if (n % 100 == 0) {
@@ -105,7 +144,7 @@ public class Main {
         }, executorService);
     }
 
-    private static CompletableFuture<Void> relate(GraknSession session, int n) {
+    private static CompletableFuture<Void> relatePerson(GraknSession session, int n) {
         System.out.println("relating " + n + " person(s) with a parent child relationship...");
         return CompletableFuture.supplyAsync(() -> {
             for (int i = 0; i < n - 1; ++i) {
