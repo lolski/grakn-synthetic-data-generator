@@ -28,28 +28,28 @@ public class Main {
         //
         final String GRAKN_URI = System.getenv("GRAKN_URI") != null ? System.getenv("GRAKN_URI") : "localhost:48555";
         final String GRAKN_KEYSPACE = System.getenv("GRAKN_KEYSPACE") != null ? System.getenv("GRAKN_KEYSPACE") : "grakn";
-        final int N_THREAD = System.getenv("N_THREAD") != null ? Integer.parseInt(System.getenv("N_THREAD")) : 4;
-        final int N_ATTRIBUTE = System.getenv("N_ATTRIBUTE") != null ? Integer.parseInt(System.getenv("N_ATTRIBUTE")) : 200;
+        final int DUPLICATE = 1;
+        final int NUM_ENTITIES = System.getenv("NUM_ENTITIES") != null ? Integer.parseInt(System.getenv("NUM_ENTITIES")) : 200;
         final String ACTION = System.getenv("ACTION") != null ? System.getenv("ACTION") : "count";
 
-        final ExecutorService executorService = Executors.newFixedThreadPool(N_THREAD);
+        final ExecutorService executorService = Executors.newFixedThreadPool(DUPLICATE);
 
         //
         // Create a schema, then perform multi-threaded data insertion where each thread inserts exactly the same data
         //
-        System.out.println("starting test with the following configuration: Grakn URI: " + GRAKN_URI + ", keyspace: " + GRAKN_KEYSPACE + ", thread: " + N_THREAD + ", unique attribute: " + N_ATTRIBUTE);
+        System.out.println("starting test with the following configuration: Grakn URI: " + GRAKN_URI + ", keyspace: " + GRAKN_KEYSPACE + ", thread: " + DUPLICATE + ", unique attribute: " + NUM_ENTITIES);
         GraknSession session = RemoteKGMS.session(new SimpleURI(GRAKN_URI), Paths.get("./trustedCert.crt"), Keyspace.of(GRAKN_KEYSPACE), "cassandra", "cassandra");
 
 //        GraknSession session = RemoteGrakn.session(new SimpleURI(GRAKN_URI), Keyspace.of(GRAKN_KEYSPACE));
 
         if (ACTION.equals("count")) {
-            verifyAndPrint(session, N_ATTRIBUTE);
+            verifyAndPrint(session, NUM_ENTITIES);
         }
         else if (ACTION.equals("insert")) {
             System.out.println("defining schema...");
             CompletableFuture<Void> asyncAll = define(session)
-                    .thenCompose(e -> insertMultithreadedExecution(executorService, session, N_ATTRIBUTE, N_THREAD))
-                    .thenCompose(e -> relate(session, N_ATTRIBUTE));
+                    .thenCompose(e -> insert(session, 0, NUM_ENTITIES, executorService))
+                    .thenCompose(e -> relate(session, NUM_ENTITIES));
 
             //
             // Cleanups: close the session and the executor service
@@ -60,8 +60,8 @@ public class Main {
                     executorService.shutdown();
                     executorService.awaitTermination(10, TimeUnit.SECONDS);
                     if (ex == null) {
-                        System.out.println("inserted " + N_ATTRIBUTE * N_THREAD + " attribute in total of which "
-                                + N_ATTRIBUTE + " is unique. if post-processing works correctly, grakn should have only " + N_ATTRIBUTE + " attributes.");
+                        System.out.println("inserted " + NUM_ENTITIES * DUPLICATE + " attribute in total of which "
+                                + NUM_ENTITIES + " is unique. if post-processing works correctly, grakn should have only " + NUM_ENTITIES + " attributes.");
                         System.out.println("test finished successfully!");
                     }
                 } catch (InterruptedException e) {
@@ -72,27 +72,6 @@ public class Main {
         else {
             System.err.println("ACTION must be 'count' or 'insert'");
         }
-    }
-
-    private static CompletableFuture<Void> insertMultithreadedExecution(ExecutorService executorService, GraknSession session, int numOfAttributes, int numOfExecutions) {
-        List<CompletableFuture<Void>> executions = new LinkedList<>();
-
-        for (int i = 0; i < numOfExecutions; ++i) {
-            final int executionId = i;
-            System.out.println("execution " + i + " starting...");
-
-            CompletableFuture<Void> insertExecution = CompletableFuture.<Void>supplyAsync(() -> {
-                insert(session, executionId, numOfAttributes);
-                return null;
-            }, executorService).exceptionally(ex2 -> {
-                ex2.printStackTrace(System.err);
-                return null;
-            });
-
-            executions.add(insertExecution);
-        }
-
-        return CompletableFuture.allOf(executions.toArray(new CompletableFuture[executions.size()]));
     }
 
     private static CompletableFuture<Void> define(GraknSession session) {
@@ -111,31 +90,35 @@ public class Main {
         });
     }
 
-    private static void insert(GraknSession session, int executionId, int n) {
-        for (int i = 0; i < n; ++i) {
-            if (n % 100 == 0) {
-                System.out.println("execution " + executionId + " is now inserting attribute(s) no. " + i + "...");
+    private static CompletableFuture<Void> insert(GraknSession session, int executionId, int n, ExecutorService executorService) {
+        return CompletableFuture.supplyAsync(() -> {
+            for (int i = 0; i < n; ++i) {
+                if (n % 100 == 0) {
+                    System.out.println("execution " + executionId + " is now inserting entities no. " + i + "...");
+                }
+                try (GraknTx tx = session.open(GraknTxType.WRITE)) {
+                    tx.graql().insert(var().isa("person").has("name", Integer.toString(i))).execute();
+                    tx.commit();
+                }
             }
-            try (GraknTx tx = session.open(GraknTxType.WRITE)) {
-                tx.graql().insert(var().isa("person").has("name", Integer.toString(i))).execute();
-                tx.commit();
-            }
-        }
+            return null;
+        }, executorService);
     }
 
     private static CompletableFuture<Void> relate(GraknSession session, int n) {
         System.out.println("relating " + n + " person(s) with a parent child relationship...");
         return CompletableFuture.supplyAsync(() -> {
-            try (GraknTx tx = session.open(GraknTxType.WRITE)) {
-                for (int i = 0; i < n - 1; ++i) {
-                    Match toBeLinked = tx.graql()
-                        .match(
-                            var("prnt").isa("person").has("name", Integer.toString(i)),
-                            var("chld").isa("person").has("name", Integer.toString(i + 1)));
-
+            for (int i = 0; i < n - 1; ++i) {
+                try (GraknTx tx = session.open(GraknTxType.WRITE)) {
+                    String prntId = Integer.toString(i);
+                    String chldId = Integer.toString(i + 1);
+                    Match toBeLinked = tx.graql().match(
+                            var("prnt").isa("person").has("name", prntId),
+                            var("chld").isa("person").has("name", chldId));
                     toBeLinked.insert(var().isa("parentchild").rel("parent", "prnt").rel("child", "chld")).execute();
+                    toBeLinked.get().execute().forEach(e -> System.out.println(e.get("prnt").getId() + " name = " + prntId + " (prnt) --> (chld) " + e.get("chld").getId() + " " + chldId));
+                    tx.commit();
                 }
-                tx.commit();
             }
             return null;
         });
@@ -146,11 +129,9 @@ public class Main {
             for (int i = 0; i < n; ++i) {
                 String prntId = Integer.toString(i);
                 String chldId = Integer.toString(i + 1);
-                Match toBeLinked = tx.graql()
-                        .match(
-                                var("prnt").isa("person").has("name", prntId),
-                                var("chld").isa("person").has("name", chldId));
-
+                Match toBeLinked = tx.graql().match(
+                        var("prnt").isa("person").has("name", prntId),
+                        var("chld").isa("person").has("name", chldId));
                 toBeLinked.get().execute().forEach(e -> System.out.println(e.get("prnt").getId() + " name = " + prntId + " (prnt) --> (chld) " + e.get("chld").getId() + " " + chldId));
             }
         }
