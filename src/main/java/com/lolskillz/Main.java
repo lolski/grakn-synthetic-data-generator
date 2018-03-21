@@ -6,6 +6,7 @@ import ai.grakn.GraknTxType;
 import ai.grakn.Keyspace;
 import ai.grakn.concept.AttributeType;
 import ai.grakn.graql.Match;
+import ai.grakn.graql.admin.Answer;
 import ai.grakn.kgms.remote.RemoteKGMS;
 import ai.grakn.util.SimpleURI;
 
@@ -165,13 +166,19 @@ public class Main {
 
     private static void verifyAndPrint(GraknSession session, int n) {
         try (GraknTx tx = session.open(GraknTxType.WRITE)) {
-            for (int i = 0; i < n; ++i) {
+            for (int i = 0; i < n-1; ++i) { // n-1, because we're iterating up to the 2nd last person (as the last person doesn't have any child)
                 String prntId = Integer.toString(i);
                 String chldId = Integer.toString(i + 1);
                 Match toBeLinked = tx.graql().match(
                         var("prnt").isa("person").has("name", prntId),
                         var("chld").isa("person").has("name", chldId));
-                toBeLinked.get().execute().forEach(e -> System.out.println(e.get("prnt").getId() + " name = " + prntId + " (prnt) --> (chld) " + e.get("chld").getId() + " " + chldId));
+                List<Answer> execute = toBeLinked.get().execute();
+                if (execute.isEmpty()) {
+                    System.err.println("NO RESULT FOR '" + toBeLinked.get().toString() + "'");
+                }
+                else {
+                    execute.forEach(e -> System.out.println(e.get("prnt").getId() + " name = " + prntId + " (prnt) --> (chld) " + e.get("chld").getId() + " " + chldId));
+                }
             }
         }
 
