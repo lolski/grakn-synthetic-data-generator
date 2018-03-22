@@ -171,13 +171,15 @@ public class Main {
                 String chldId = Integer.toString(i + 1);
                 Match toBeLinked = tx.graql().match(
                         var("prnt").isa("person").has("name", prntId),
-                        var("chld").isa("person").has("name", chldId));
+                        var("chld").isa("person").has("name", chldId),
+                        var("prntchld").rel("parent", "prnt").rel("child", "chld")
+                );
                 List<Answer> execute = toBeLinked.get().execute();
                 if (execute.isEmpty()) {
                     System.err.println("NO RESULT FOR '" + toBeLinked.get().toString() + "'");
                 }
                 else {
-                    execute.forEach(e -> System.out.println(e.get("prnt").getId() + " name = " + prntId + " (prnt) --> (chld) " + e.get("chld").getId() + " " + chldId));
+                    execute.forEach(e -> System.out.println(e.get("prnt").getId() + " name = " + prntId + " (prnt) --> (chld) " + e.get("chld").getId() + " " + chldId + " via relationship '" + e.get("prntchld")));
                 }
             }
         }
