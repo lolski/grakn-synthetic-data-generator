@@ -184,8 +184,16 @@ public class Main {
         }
 
         try (GraknTx tx = session.open(GraknTxType.WRITE)) {
+            System.out.print("performing count using match - aggregate count...");
             long person = tx.graql().match(var("n").isa("person")).aggregate(count()).execute();
             long name = tx.graql().match(var("n").isa("name")).aggregate(count()).execute();
+            System.out.println("person count = " + person + ", name = " + name);
+        }
+
+        try (GraknTx tx = session.open(GraknTxType.WRITE)) {
+            System.out.print("performing count using compute count...");
+            long person = tx.graql().compute().count().in("person").execute();
+            long name = tx.graql().compute().count().in("name").execute();
             System.out.println("person count = " + person + ", name = " + name);
         }
     }
