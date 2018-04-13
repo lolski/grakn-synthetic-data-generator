@@ -8,7 +8,6 @@ import ai.grakn.concept.AttributeType;
 import ai.grakn.graql.Match;
 import ai.grakn.graql.admin.Answer;
 import ai.grakn.kgms.remote.RemoteKGMS;
-//import ai.grakn.remote.RemoteGrakn;
 import ai.grakn.util.SimpleURI;
 
 import java.nio.file.Paths;
@@ -20,7 +19,6 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 import java.util.function.Consumer;
 import java.util.function.Function;
-import java.util.function.Supplier;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 import java.util.stream.Stream;
@@ -47,8 +45,6 @@ public class Main {
         //
         System.out.println("starting test with the following configuration: Grakn URI: " + GRAKN_URI + ", keyspace: " + GRAKN_KEYSPACE + ", user: " + GRAKN_USER + ", '" + GRAKN_PASSWORD + "', thread: " + DUPLICATE + ", unique attribute: " + NUM_ENTITIES);
         GraknSession session = RemoteKGMS.session(new SimpleURI(GRAKN_URI), Paths.get("./trustedCert.crt"), Keyspace.of(GRAKN_KEYSPACE), GRAKN_USER, GRAKN_PASSWORD);
-
-//        GraknSession session = RemoteGrakn.session(new SimpleURI(GRAKN_URI), Keyspace.of(GRAKN_KEYSPACE));
 
         if (ACTION.equals("count")) {
             verifyAndPrint(session, NUM_ENTITIES);
@@ -188,8 +184,6 @@ public class Main {
         }
 
         try (GraknTx tx = session.open(GraknTxType.WRITE)) {
-//            long person = tx.graql().compute().count().in("entity").execute();
-//            long name = tx.graql().compute().count().in("name").execute();
             long person = tx.graql().match(var("n").isa("person")).aggregate(count()).execute();
             long name = tx.graql().match(var("n").isa("name")).aggregate(count()).execute();
             System.out.println("person count = " + person + ", name = " + name);
