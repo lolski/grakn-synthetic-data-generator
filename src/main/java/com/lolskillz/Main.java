@@ -8,6 +8,7 @@ import ai.grakn.concept.AttributeType;
 import ai.grakn.graql.Match;
 import ai.grakn.graql.admin.Answer;
 import ai.grakn.kgms.remote.RemoteKGMS;
+//import ai.grakn.remote.RemoteGrakn;
 import ai.grakn.util.SimpleURI;
 
 import java.nio.file.Paths;
@@ -31,19 +32,21 @@ public class Main {
         //
         // Parameters
         //
+        final String GRAKN_USER = System.getenv("GRAKN_USER") != null ? System.getenv("GRAKN_USER") : "cassandra";
+        final String GRAKN_PASSWORD = System.getenv("GRAKN_PASSWORD") != null ? System.getenv("GRAKN_PASSWORD") : "cassandra";
         final String GRAKN_URI = System.getenv("GRAKN_URI") != null ? System.getenv("GRAKN_URI") : "localhost:48555";
         final String GRAKN_KEYSPACE = System.getenv("GRAKN_KEYSPACE") != null ? System.getenv("GRAKN_KEYSPACE") : "grakn";
         final int DUPLICATE = System.getenv("DUPLICATE") != null ? Integer.parseInt(System.getenv("DUPLICATE")) : 1;
         final int NUM_ENTITIES = System.getenv("NUM_ENTITIES") != null ? Integer.parseInt(System.getenv("NUM_ENTITIES")) : 200;
-        final String ACTION = System.getenv("ACTION") != null ? System.getenv("ACTION") : "count";
+        final String ACTION = System.getenv("ACTION") != null ? System.getenv("ACTION") : "insert";
 
         final ExecutorService executorService = Executors.newFixedThreadPool(DUPLICATE);
 
         //
         // Create a schema, then perform multi-threaded data insertion where each thread inserts exactly the same data
         //
-        System.out.println("starting test with the following configuration: Grakn URI: " + GRAKN_URI + ", keyspace: " + GRAKN_KEYSPACE + ", thread: " + DUPLICATE + ", unique attribute: " + NUM_ENTITIES);
-        GraknSession session = RemoteKGMS.session(new SimpleURI(GRAKN_URI), Paths.get("./trustedCert.crt"), Keyspace.of(GRAKN_KEYSPACE), "cassandra", "cassandra");
+        System.out.println("starting test with the following configuration: Grakn URI: " + GRAKN_URI + ", keyspace: " + GRAKN_KEYSPACE + ", user: " + GRAKN_USER + ", '" + GRAKN_PASSWORD + "', thread: " + DUPLICATE + ", unique attribute: " + NUM_ENTITIES);
+        GraknSession session = RemoteKGMS.session(new SimpleURI(GRAKN_URI), Paths.get("./trustedCert.crt"), Keyspace.of(GRAKN_KEYSPACE), GRAKN_USER, GRAKN_PASSWORD);
 
 //        GraknSession session = RemoteGrakn.session(new SimpleURI(GRAKN_URI), Keyspace.of(GRAKN_KEYSPACE));
 
@@ -184,8 +187,8 @@ public class Main {
             }
         }
 
-        try (GraknTx tx = session.open(GraknTxType.READ)) {
-//            long person = tx.graql().compute().count().in("person").execute();
+        try (GraknTx tx = session.open(GraknTxType.WRITE)) {
+//            long person = tx.graql().compute().count().in("entity").execute();
 //            long name = tx.graql().compute().count().in("name").execute();
             long person = tx.graql().match(var("n").isa("person")).aggregate(count()).execute();
             long name = tx.graql().match(var("n").isa("name")).aggregate(count()).execute();
