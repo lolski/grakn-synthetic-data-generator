@@ -7,7 +7,7 @@ import ai.grakn.Keyspace;
 import ai.grakn.concept.AttributeType;
 import ai.grakn.graql.Match;
 import ai.grakn.graql.admin.Answer;
-import ai.grakn.kgms.remote.RemoteKGMS;
+import ai.grakn.remote.RemoteGrakn;
 import ai.grakn.util.SimpleURI;
 
 import java.nio.file.Paths;
@@ -44,7 +44,7 @@ public class Main {
         // Create a schema, then perform multi-threaded data insertion where each thread inserts exactly the same data
         //
         System.out.println("starting test with the following configuration: Grakn URI: " + GRAKN_URI + ", keyspace: " + GRAKN_KEYSPACE + ", user: " + GRAKN_USER + ", '" + GRAKN_PASSWORD + "', thread: " + DUPLICATE + ", unique attribute: " + NUM_ENTITIES);
-        GraknSession session = RemoteKGMS.session(new SimpleURI(GRAKN_URI), Paths.get("./trustedCert.crt"), Keyspace.of(GRAKN_KEYSPACE), GRAKN_USER, GRAKN_PASSWORD);
+        GraknSession session = RemoteGrakn.session(new SimpleURI(GRAKN_URI), Keyspace.of(GRAKN_KEYSPACE));
 
         if (ACTION.equals("count")) {
             verifyAndPrint(session, NUM_ENTITIES);
