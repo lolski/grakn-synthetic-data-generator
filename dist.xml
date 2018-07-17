@@ -10,7 +10,7 @@
             <outputDirectory>${file.separator}</outputDirectory>
             <directory>${basedir}</directory>
             <includes>
-                <include>beat-pp</include>
+                <include>sdgen</include>
             </includes>
             <fileMode>0755</fileMode>
         </fileSet>
