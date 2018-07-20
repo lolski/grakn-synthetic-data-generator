@@ -1,9 +1,8 @@
-import ai.grakn.GraknSession;
-import ai.grakn.GraknTx;
 import ai.grakn.GraknTxType;
 import ai.grakn.Keyspace;
+import ai.grakn.client.Grakn;
 import ai.grakn.graql.admin.Answer;
-import ai.grakn.remote.RemoteGrakn;
+import ai.grakn.util.GraqlSyntax;
 import ai.grakn.util.SimpleURI;
 
 import java.util.List;
@@ -20,8 +19,8 @@ public class Test {
         final String GRAKN_URI = "localhost:48555";
         final String GRAKN_KEYSPACE = "grakn";
 
-        try (GraknSession session = RemoteGrakn.session(new SimpleURI(GRAKN_URI), Keyspace.of(GRAKN_KEYSPACE))) {
-            try (GraknTx tx = session.open(GraknTxType.WRITE)) {
+        try (Grakn.Session session = Grakn.session(new SimpleURI(GRAKN_URI), Keyspace.of(GRAKN_KEYSPACE))) {
+            try (Grakn.Transaction tx = session.transaction(GraknTxType.WRITE)) {
                 String entType = "person14";
                 tx.graql().define(label(entType).sub("entity")).execute();
                 tx.graql().insert(var().isa(entType)).execute();
@@ -43,12 +42,12 @@ public class Test {
         final String GRAKN_URI = "localhost:48555";
         final String GRAKN_KEYSPACE = "grakn";
 
-        try (GraknSession session = RemoteGrakn.session(new SimpleURI(GRAKN_URI), Keyspace.of(GRAKN_KEYSPACE))) {
-            try (GraknTx tx = session.open(GraknTxType.WRITE)) {
+        try (Grakn.Session session = Grakn.session(new SimpleURI(GRAKN_URI), Keyspace.of(GRAKN_KEYSPACE))) {
+            try (Grakn.Transaction tx = session.transaction(GraknTxType.WRITE)) {
                 List<Answer> answers = tx.graql().match(var("x").isa("value")).get().execute();
                 int i = 1;
                 for (Answer e: answers) {
-                    System.out.println(i  + ". " + e.get("x").getId() + " -- " + e.get("x").isAttribute());
+                    System.out.println(i  + ". " + e.get("x").id() + " -- " + e.get("x").isAttribute());
                     ++i;
                 }
             }
@@ -60,17 +59,17 @@ public class Test {
         final String GRAKN_URI = "localhost:48555";
         final String GRAKN_KEYSPACE = "grakn2";
 
-        try (GraknSession session = RemoteGrakn.session(new SimpleURI(GRAKN_URI), Keyspace.of(GRAKN_KEYSPACE))) {
-            try (GraknTx tx = session.open(GraknTxType.WRITE)) {
+        try (Grakn.Session session = Grakn.session(new SimpleURI(GRAKN_URI), Keyspace.of(GRAKN_KEYSPACE))) {
+            try (Grakn.Transaction tx = session.transaction(GraknTxType.WRITE)) {
                 String entType = "person";
                 tx.graql().define(label(entType).sub("entity")).execute();
                 tx.graql().insert(var().isa(entType)).execute();
                 tx.commit();
             }
         }
-        try (GraknSession session = RemoteGrakn.session(new SimpleURI(GRAKN_URI), Keyspace.of(GRAKN_KEYSPACE))) {
-            try (GraknTx tx = session.open(GraknTxType.WRITE)) {
-                long count = tx.graql().compute().count().in("entity").execute();
+        try (Grakn.Session session = Grakn.session(new SimpleURI(GRAKN_URI), Keyspace.of(GRAKN_KEYSPACE))) {
+            try (Grakn.Transaction tx = session.transaction(GraknTxType.WRITE)) {
+                long count = tx.graql().compute(GraqlSyntax.Compute.Method.COUNT).in("entity").execute().getNumber().get().longValue();
                 System.out.println("entity count = " + count);
             }
         }
