@@ -5,45 +5,40 @@ import ai.grakn.Keyspace;
 import ai.grakn.client.Grakn;
 import ai.grakn.concept.AttributeType;
 import ai.grakn.graql.Match;
-import ai.grakn.graql.admin.Answer;
+import ai.grakn.graql.answer.ConceptMap;
 import ai.grakn.util.GraqlSyntax;
 import ai.grakn.util.SimpleURI;
 
-import java.nio.file.Paths;
+import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
+import java.util.Random;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
-import java.util.function.Consumer;
-import java.util.function.Function;
-import java.util.stream.Collectors;
-import java.util.stream.IntStream;
-import java.util.stream.Stream;
-
 import static ai.grakn.graql.Graql.*;
 
 public class Main {
+
     public static void main(String[] args) throws InterruptedException, ExecutionException {
         //
         // Parameters
         //
-        final String GRAKN_USER = System.getenv("GRAKN_USER") != null ? System.getenv("GRAKN_USER") : "cassandra";
-        final String GRAKN_PASSWORD = System.getenv("GRAKN_PASSWORD") != null ? System.getenv("GRAKN_PASSWORD") : "cassandra";
         final String GRAKN_URI = System.getenv("GRAKN_URI") != null ? System.getenv("GRAKN_URI") : "localhost:48555";
         final String GRAKN_KEYSPACE = System.getenv("GRAKN_KEYSPACE") != null ? System.getenv("GRAKN_KEYSPACE") : "grakn";
         final int DUPLICATE = System.getenv("DUPLICATE") != null ? Integer.parseInt(System.getenv("DUPLICATE")) : 1;
         final int NUM_ENTITIES = System.getenv("NUM_ENTITIES") != null ? Integer.parseInt(System.getenv("NUM_ENTITIES")) : 200;
         final String ACTION = System.getenv("ACTION") != null ? System.getenv("ACTION") : "insert";
 
-        final ExecutorService executorService = Executors.newFixedThreadPool(DUPLICATE);
+        final ExecutorService executorService = Executors.newSingleThreadExecutor();
 
         //
         // Create a schema, then perform multi-threaded data insertion where each thread inserts exactly the same data
         //
-        System.out.println("starting test with the following configuration: Grakn URI: " + GRAKN_URI + ", keyspace: " + GRAKN_KEYSPACE + ", user: " + GRAKN_USER + ", '" + GRAKN_PASSWORD + "', thread: " + DUPLICATE + ", unique attribute: " + NUM_ENTITIES);
-        Grakn.Session session = Grakn.session(new SimpleURI(GRAKN_URI), Keyspace.of(GRAKN_KEYSPACE));
+        System.out.println("starting test with the following configuration: Grakn URI: " + GRAKN_URI + ", keyspace: " + GRAKN_KEYSPACE + ", thread: " + DUPLICATE + ", unique attribute: " + NUM_ENTITIES);
+        Grakn.Session session = new Grakn(new SimpleURI(GRAKN_URI)).session(Keyspace.of(GRAKN_KEYSPACE));
 
         if (ACTION.equals("count")) {
             verifyAndPrint(session, NUM_ENTITIES);
@@ -51,7 +46,7 @@ public class Main {
         else if (ACTION.equals("insert")) {
             System.out.println("defining schema...");
             CompletableFuture<Void> asyncAll = define(session)
-                    .thenCompose(e -> insertName(session, NUM_ENTITIES, DUPLICATE, executorService))
+                    .thenCompose(e -> insertNameShuffled(session, NUM_ENTITIES, DUPLICATE))
                     .thenCompose(e -> insertPerson(session, 0, NUM_ENTITIES, executorService))
                     .thenCompose(e -> relatePerson(session, NUM_ENTITIES));
 
@@ -96,36 +91,28 @@ public class Main {
         });
     }
 
-    private static CompletableFuture<Void> insertName(Grakn.Session session, int nameCount, int duplicatePerNameCount, ExecutorService executorService) {
-        // insert name with value 'name'
-        Consumer<Integer> insert = name -> {
-            try (Grakn.Transaction tx = session.transaction(GraknTxType.WRITE)) {
-                tx.graql().insert(var().isa("name").val(Integer.toString(name))).execute();
-                tx.commit();
+    private static CompletableFuture<Void> insertNameShuffled(Grakn.Session session, int nameCount, int duplicatePerNameCount) {
+        return CompletableFuture.supplyAsync(() -> {
+            Random rng = new Random(1);
+
+            List<Integer> names = new ArrayList<>();
+            for (int i = 0; i < nameCount; ++i) {
+                for (int j = 0; j < duplicatePerNameCount; ++j) {
+                    names.add(i);
+                }
             }
-        };
+            Collections.shuffle(names, rng);
 
-        // insert name with value 'name', along with 'duplicatePerNameCount' duplicates to test post-processing
-        Function<Integer, CompletableFuture<Void>> insertWithDuplicateInParallel = name -> {
-            Stream<CompletableFuture<Void>> insertWithDuplicate = IntStream.range(0, duplicatePerNameCount)
-                    .mapToObj(d -> CompletableFuture.<Void>supplyAsync(() -> {
-                        insert.accept(name);
-                        System.out.println("inserted copy no " + d + " for the name attribute with value '" + name + "'");
-                        return null;
-                    }, executorService));
+            for (int name: names) {
+                try (Grakn.Transaction tx = session.transaction(GraknTxType.WRITE)) {
+                    System.out.println("inserted a new name attribute with value '" + name + "'");
+                    tx.graql().insert(var().isa("name").val(Integer.toString(name))).execute();
+                    tx.commit();
+                }
+            }
 
-            final List<CompletableFuture<Void>> collect = insertWithDuplicate.collect(Collectors.toList());
-            return CompletableFuture.allOf(collect.toArray(new CompletableFuture[duplicatePerNameCount]));
-        };
-
-        // insert a 'nameCount' number of name attribute, with'duplicate' number of duplicate
-        Function<Integer, CompletableFuture<Void>> insertAllInParallel = count -> {
-            Stream<CompletableFuture<Void>> insertWithDuplicate = IntStream.range(0, count).mapToObj(insertWithDuplicateInParallel::apply);
-            final List<CompletableFuture<Void>> collect = insertWithDuplicate.collect(Collectors.toList());
-            return CompletableFuture.allOf(collect.toArray(new CompletableFuture[nameCount]));
-        };
-
-        return insertAllInParallel.apply(nameCount);
+            return null;
+        });
     }
 
     private static CompletableFuture<Void> insertPerson(Grakn.Session session, int executionId, int n, ExecutorService executorService) {
@@ -172,7 +159,7 @@ public class Main {
                         var("chld").isa("person").has("name", chldId),
                         var("prntchld").rel("parent", "prnt").rel("child", "chld")
                 );
-                List<Answer> execute = toBeLinked.get().execute();
+                List<ConceptMap> execute = toBeLinked.get().execute();
                 if (execute.isEmpty()) {
                     System.err.println("NO RESULT FOR '" + toBeLinked.get().toString() + "'");
                 }
@@ -184,15 +171,15 @@ public class Main {
 
         try (Grakn.Transaction tx = session.transaction(GraknTxType.WRITE)) {
             System.out.print("performing count using match - aggregate count...");
-            long person = tx.graql().match(var("n").isa("person")).aggregate(count()).execute();
-            long name = tx.graql().match(var("n").isa("name")).aggregate(count()).execute();
+            long person = tx.graql().match(var("n").isa("person")).aggregate(count()).execute().get(0).number().longValue();
+            long name = tx.graql().match(var("n").isa("name")).aggregate(count()).execute().get(0).number().longValue();
             System.out.println("person count = " + person + ", name = " + name);
         }
 
         try (Grakn.Transaction tx = session.transaction(GraknTxType.WRITE)) {
             System.out.print("performing count using compute count...");
-            long person = tx.graql().compute(GraqlSyntax.Compute.Method.COUNT).in("person").execute().getNumber().get().longValue();
-            long name = tx.graql().compute(GraqlSyntax.Compute.Method.COUNT).in("name").execute().getNumber().get().longValue();
+            long person = tx.graql().compute(GraqlSyntax.Compute.Method.COUNT).in("person").execute().get(0).number().longValue();
+            long name = tx.graql().compute(GraqlSyntax.Compute.Method.COUNT).in("name").execute().get(0).number().longValue();
             System.out.println("person count = " + person + ", name = " + name);
         }
     }
