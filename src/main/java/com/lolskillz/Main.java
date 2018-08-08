@@ -19,18 +19,30 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 import static ai.grakn.graql.Graql.*;
+import static com.lolskillz.ActionCount.verifyAndPrint;
+import static com.lolskillz.ActionInsert.define;
+import static com.lolskillz.ActionInsert.insertNameShuffled;
+import static com.lolskillz.ActionInsert.insertPerson;
+import static com.lolskillz.ActionInsert.relatePerson;
 
 public class Main {
 
     public static void main(String[] args) throws InterruptedException, ExecutionException {
+        if (args.length == 1) {
+            System.out.println("synthetic-data-generator usage:");
+            System.out.println("- insert data: ./sdgen <host:port> <keyspace> insert <num-duplicates-per-entity> <num-entities> eg., ./sdgen localhost:48555 grakn insert 2 100");
+            System.out.println("- count data: ./sdgen <host:port> <keyspace> count eg., ./sdgen localhost:48555 grakn count");
+            System.exit(0);
+        }
+
         //
         // Parameters
         //
-        final String GRAKN_URI = System.getenv("GRAKN_URI") != null ? System.getenv("GRAKN_URI") : "localhost:48555";
-        final String GRAKN_KEYSPACE = System.getenv("GRAKN_KEYSPACE") != null ? System.getenv("GRAKN_KEYSPACE") : "grakn";
-        final int DUPLICATE = System.getenv("DUPLICATE") != null ? Integer.parseInt(System.getenv("DUPLICATE")) : 1;
-        final int NUM_ENTITIES = System.getenv("NUM_ENTITIES") != null ? Integer.parseInt(System.getenv("NUM_ENTITIES")) : 200;
-        final String ACTION = System.getenv("ACTION") != null ? System.getenv("ACTION") : "insert";
+        final String GRAKN_URI = args[1];
+        final String GRAKN_KEYSPACE = args[2];
+        final String ACTION = args[3];
+        final int DUPLICATE = Integer.parseInt(args[4]);
+        final int NUM_ENTITIES = Integer.parseInt(args[5]);
 
         final ExecutorService executorService = Executors.newSingleThreadExecutor();
 
@@ -74,8 +86,10 @@ public class Main {
             System.err.println("ACTION must be 'count' or 'insert'");
         }
     }
+}
 
-    private static CompletableFuture<Void> define(Grakn.Session session) {
+class ActionInsert {
+    public static CompletableFuture<Void> define(Grakn.Session session) {
         return CompletableFuture.supplyAsync(() -> {
             try (Grakn.Transaction tx = session.transaction(GraknTxType.WRITE)) {
                 tx.graql().define(
@@ -84,14 +98,14 @@ public class Main {
                         label("child").sub("role"),
                         label("person").sub("entity").has("name").plays("parent").plays("child"),
                         label("parentchild").sub("relationship").relates("parent").relates("child")
-                    ).execute();
+                ).execute();
                 tx.commit();
             }
             return null;
         });
     }
 
-    private static CompletableFuture<Void> insertNameShuffled(Grakn.Session session, int nameCount, int duplicatePerNameCount) {
+    public static CompletableFuture<Void> insertNameShuffled(Grakn.Session session, int nameCount, int duplicatePerNameCount) {
         return CompletableFuture.supplyAsync(() -> {
             Random rng = new Random(1);
 
@@ -104,18 +118,26 @@ public class Main {
             Collections.shuffle(names, rng);
 
             for (int name: names) {
-                try (Grakn.Transaction tx = session.transaction(GraknTxType.WRITE)) {
-                    System.out.println("inserted a new name attribute with value '" + name + "'");
-                    tx.graql().insert(var().isa("name").val(Integer.toString(name))).execute();
-                    tx.commit();
+                boolean insertSucceeded = false;
+                System.out.print("inserted a new name attribute with value '" + name + "'");
+                while (!insertSucceeded) {
+                    try (Grakn.Transaction tx = session.transaction(GraknTxType.WRITE)) {
+                        tx.graql().insert(var().isa("name").val(Integer.toString(name))).execute();
+                        tx.commit();
+                        insertSucceeded = true;
+                    }
+                    catch (RuntimeException e) {
+                        System.out.print(".");
+                    }
                 }
+                System.out.println();
             }
 
             return null;
         });
     }
 
-    private static CompletableFuture<Void> insertPerson(Grakn.Session session, int executionId, int n, ExecutorService executorService) {
+    public static CompletableFuture<Void> insertPerson(Grakn.Session session, int executionId, int n, ExecutorService executorService) {
         return CompletableFuture.supplyAsync(() -> {
             for (int i = 0; i < n; ++i) {
                 if (n % 100 == 0) {
@@ -130,7 +152,7 @@ public class Main {
         }, executorService);
     }
 
-    private static CompletableFuture<Void> relatePerson(Grakn.Session session, int n) {
+    public static CompletableFuture<Void> relatePerson(Grakn.Session session, int n) {
         System.out.println("relating " + n + " person(s) with a parent child relationship...");
         return CompletableFuture.supplyAsync(() -> {
             for (int i = 0; i < n - 1; ++i) {
@@ -148,8 +170,10 @@ public class Main {
             return null;
         });
     }
+}
 
-    private static void verifyAndPrint(Grakn.Session session, int n) {
+class ActionCount {
+    public static void verifyAndPrint(Grakn.Session session, int n) {
         try (Grakn.Transaction tx = session.transaction(GraknTxType.WRITE)) {
             for (int i = 0; i < n-1; ++i) { // n-1, because we're iterating up to the 2nd last person (as the last person doesn't have any child)
                 String prntId = Integer.toString(i);
