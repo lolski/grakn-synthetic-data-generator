@@ -54,15 +54,9 @@
 
     <dependencies>
         <dependency>
-            <groupId>ai.grakn</groupId>
-            <artifactId>client-java</artifactId>
-            <version>1.4.0-SNAPSHOT</version>
-            <exclusions>
-                <exclusion>
-                    <groupId>org.slf4j</groupId>
-                    <artifactId>slf4j-simple</artifactId>
-                </exclusion>
-            </exclusions>
+            <groupId>ai.grakn.kgms</groupId>
+            <artifactId>client</artifactId>
+            <version>0833d2abb351524fd9c133bb9287c1de2ba845e7</version>
         </dependency>
     </dependencies>
 </project>

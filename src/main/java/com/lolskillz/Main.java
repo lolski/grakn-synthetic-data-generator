@@ -2,6 +2,7 @@ package com.lolskillz;
 
 import ai.grakn.GraknTxType;
 import ai.grakn.Keyspace;
+import ai.grakn.client.ClientFactory;
 import ai.grakn.client.Grakn;
 import ai.grakn.concept.AttributeType;
 import ai.grakn.graql.Match;
@@ -18,7 +19,10 @@ import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
-import static ai.grakn.graql.Graql.*;
+
+import static ai.grakn.graql.Graql.label;
+import static ai.grakn.graql.Graql.var;
+import static ai.grakn.graql.internal.query.aggregate.Aggregates.count;
 import static com.lolskillz.ActionCount.verifyAndPrint;
 import static com.lolskillz.ActionInsert.define;
 import static com.lolskillz.ActionInsert.insertNameShuffled;
@@ -28,9 +32,9 @@ import static com.lolskillz.ActionInsert.relatePerson;
 public class Main {
 
     public static void main(String[] args) throws InterruptedException, ExecutionException {
-        if (args.length == 1) {
+        if (args.length == 0) {
             System.out.println("synthetic-data-generator usage:");
-            System.out.println("- insert data: ./sdgen <host:port> <keyspace> insert <num-duplicates-per-entity> <num-entities> eg., ./sdgen localhost:48555 grakn insert 2 100");
+            System.out.println("- insert data: ./sdgen <host:port> <username> <password> <keyspace> insert <num-duplicates-per-entity> <num-entities> eg., ./sdgen localhost:48555 cassandra cassandra grakn insert 2 100");
             System.out.println("- count data: ./sdgen <host:port> <keyspace> count eg., ./sdgen localhost:48555 grakn count");
             System.exit(0);
         }
@@ -38,19 +42,21 @@ public class Main {
         //
         // Parameters
         //
-        final String GRAKN_URI = args[1];
-        final String GRAKN_KEYSPACE = args[2];
-        final String ACTION = args[3];
-        final int DUPLICATE = Integer.parseInt(args[4]);
-        final int NUM_ENTITIES = Integer.parseInt(args[5]);
+        final String GRAKN_URI = args[0];
+        final String USERNAME = args[1];
+        final String PASSWORD = args[2];
+        final String GRAKN_KEYSPACE = args[3];
+        final String ACTION = args[4];
+        final int DUPLICATE = Integer.parseInt(args[5]);
+        final int NUM_ENTITIES = Integer.parseInt(args[6]);
 
-        final ExecutorService executorService = Executors.newSingleThreadExecutor();
+        final ExecutorService executorService = Executors.newFixedThreadPool(8);
 
         //
         // Create a schema, then perform multi-threaded data insertion where each thread inserts exactly the same data
         //
         System.out.println("starting test with the following configuration: Grakn URI: " + GRAKN_URI + ", keyspace: " + GRAKN_KEYSPACE + ", thread: " + DUPLICATE + ", unique attribute: " + NUM_ENTITIES);
-        Grakn.Session session = new Grakn(new SimpleURI(GRAKN_URI)).session(Keyspace.of(GRAKN_KEYSPACE));
+        Grakn.Session session = new ClientFactory(new SimpleURI(GRAKN_URI), "cassandra", "cassandra").client().session(Keyspace.of(GRAKN_KEYSPACE));
 
         if (ACTION.equals("count")) {
             verifyAndPrint(session, NUM_ENTITIES);
@@ -107,6 +113,7 @@ class ActionInsert {
 
     public static CompletableFuture<Void> insertNameShuffled(Grakn.Session session, int nameCount, int duplicatePerNameCount) {
         return CompletableFuture.supplyAsync(() -> {
+            long startMeasure = System.currentTimeMillis();
             Random rng = new Random(1);
 
             List<Integer> names = new ArrayList<>();
@@ -133,6 +140,7 @@ class ActionInsert {
                 System.out.println();
             }
 
+            System.out.println("elapsed = " + (System.currentTimeMillis() - startMeasure) + "ms");
             return null;
         });
     }
