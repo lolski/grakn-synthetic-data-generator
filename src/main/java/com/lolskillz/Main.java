@@ -35,7 +35,7 @@ public class Main {
         if (args.length == 0) {
             System.out.println("synthetic-data-generator usage:");
             System.out.println("- insert data: ./sdgen <host:port> <username> <password> <keyspace> insert <num-duplicates-per-entity> <num-entities> eg., ./sdgen localhost:48555 cassandra cassandra grakn insert 2 100");
-            System.out.println("- count data: ./sdgen <host:port> <keyspace> count eg., ./sdgen localhost:48555 grakn count");
+            System.out.println("- count data: ./sdgen <host:port> <username> <password> <keyspace> count eg., ./sdgen localhost:48555 cassandra cassandra grakn count");
             System.exit(0);
         }
 
@@ -56,7 +56,7 @@ public class Main {
         // Create a schema, then perform multi-threaded data insertion where each thread inserts exactly the same data
         //
         System.out.println("starting test with the following configuration: Grakn URI: " + GRAKN_URI + ", keyspace: " + GRAKN_KEYSPACE + ", thread: " + DUPLICATE + ", unique attribute: " + NUM_ENTITIES);
-        Grakn.Session session = new ClientFactory(new SimpleURI(GRAKN_URI), "cassandra", "cassandra").client().session(Keyspace.of(GRAKN_KEYSPACE));
+        Grakn.Session session = new ClientFactory(new SimpleURI(GRAKN_URI), USERNAME, PASSWORD).client().session(Keyspace.of(GRAKN_KEYSPACE));
 
         if (ACTION.equals("count")) {
             verifyAndPrint(session, NUM_ENTITIES);
